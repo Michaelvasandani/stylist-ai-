@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db, garments, looks } from "@/lib/db";
 import { getProduct, searchCatalog, type ShopProduct } from "@/lib/shopify";
 import { CATEGORIES } from "@/lib/vision";
+import { listEvents } from "@/lib/google-calendar";
 import { getWeather } from "@/lib/weather";
 import { searchWardrobe, toGarmentCard, type GarmentCard } from "@/lib/wardrobe";
 
@@ -77,6 +78,20 @@ export function createStylistTools(userId: string) {
       description: "Forecast for a place: now, the next 18 hours, and this evening. Use when the plan is outdoors or the location is known.",
       inputSchema: z.object({ location: z.string().describe('City or neighbourhood, e.g. "San Francisco"') }),
       execute: ({ location }) => getWeather(location),
+    }),
+
+    getCalendarEvents: tool({
+      description:
+        "Read the user's upcoming events from their Google Calendar: title, time, location and notes (dress codes often live in the notes). Use when they ask what to wear for something coming up (\"tomorrow\", \"my dinner Friday\", \"this week\") or don't say where they're going.",
+      inputSchema: z.object({
+        days: z.number().int().min(1).max(30).optional().describe("How far ahead to look; default 7"),
+        query: z.string().optional().describe('Free-text match on the event, e.g. "wedding" or "dinner"'),
+      }),
+      execute: async ({ days, query }) => {
+        const cal = await listEvents(userId, { days: days ?? 7, query });
+        if (!cal) return { connected: false as const, events: [] };
+        return { connected: true as const, timeZone: cal.timeZone, events: cal.events };
+      },
     }),
 
     presentOutfit: tool({

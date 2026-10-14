@@ -65,6 +65,16 @@ export const looks = pgTable("looks", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// One linked Google account per user, for reading their calendar.
+export const googleAccounts = pgTable("google_accounts", {
+  userId: uuid("user_id").primaryKey().references(() => users.id),
+  email: text("email"),
+  refreshToken: text("refresh_token").notNull(),
+  accessToken: text("access_token"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export type Garment = typeof garments.$inferSelect;
 export type NewGarment = typeof garments.$inferInsert;
 export type Look = typeof looks.$inferSelect;

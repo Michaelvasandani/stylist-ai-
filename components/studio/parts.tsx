@@ -62,6 +62,11 @@ export function ToolPart({ tool, onPick, picked }: { tool: ToolInfo; onPick: (ga
       const t = w.evening ?? w.now;
       return <Chip done>{`Forecast · ${w.place.split(",")[0]} ${t.tempF}°${t.windMph >= 15 ? " windy" : ""}`}</Chip>;
     }
+    case "getCalendarEvents": {
+      if (!done) return <Chip done={false}>Checking your calendar…</Chip>;
+      const c = tool.output as { connected: boolean; events: unknown[] };
+      return <Chip done>{c.connected ? `Calendar · ${c.events.length} upcoming` : "Calendar not connected"}</Chip>;
+    }
     case "presentOutfit":
       if (!done) return <Chip done={false}>Putting the look together…</Chip>;
       return (

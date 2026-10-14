@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { OutfitBoard, StylistMessage } from "@/lib/stylist/tools";
 import { TopBar } from "@/components/shell/top-bar";
+import { styleMeFor, UpcomingEvents, useCalendar } from "./calendar";
 import { latestBoard, money, textOf, toolOf, ToolPart, type ShopOption } from "./parts";
 import { useVoiceLoop, type VoiceState } from "./use-voice-loop";
 
@@ -63,6 +64,7 @@ export function Studio() {
     [chat],
   );
   const voice = useVoiceLoop({ onUtterance });
+  const { cal, disconnect } = useCalendar();
   useEffect(() => {
     voiceRef.current = voice;
   }, [voice]);
@@ -100,7 +102,15 @@ export function Studio() {
         <span className="eyebrow hidden text-taupe xl:block">Vercel · Neon · Shopify · AI Gateway</span>
       </TopBar>
       <div className="grid min-h-0 flex-1 lg:grid-cols-[1fr_380px]">
-        <Canvas board={board} picks={picks} shopGaps={[...shop.keys()]} onSave={() => send("Save this look, please.")} onStarter={send} busy={busy} />
+        <Canvas
+          board={board}
+          picks={picks}
+          shopGaps={[...shop.keys()]}
+          onSave={() => send("Save this look, please.")}
+          onStarter={send}
+          busy={busy}
+          upcoming={<UpcomingEvents cal={cal} busy={busy} onPick={(e) => send(styleMeFor(e))} onDisconnect={disconnect} className="mt-8" />}
+        />
 
         <aside className="flex min-h-0 flex-col border-line bg-paper lg:border-l">
           <div className="flex items-center gap-3.5 border-b border-line px-5 py-4">
@@ -113,9 +123,13 @@ export function Studio() {
 
           <div ref={threadRef} className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
             {!chat.messages.length && (
-              <p className="font-serif text-[19px] leading-snug text-taupe">
-                Tell me where you&apos;re going, or tap the mic and just talk. I&apos;ll build it from what you own and only shop the gaps.
-              </p>
+              <>
+                <p className="font-serif text-[19px] leading-snug text-taupe">
+                  Tell me where you&apos;re going, or tap the mic and just talk. I&apos;ll build it from what you own and only shop the gaps.
+                </p>
+                {/* Phones have no canvas, so the calendar sits in the thread. */}
+                <UpcomingEvents cal={cal} busy={busy} onPick={(e) => send(styleMeFor(e))} onDisconnect={disconnect} className="lg:hidden" />
+              </>
             )}
             {chat.messages.map((m) =>
               m.role === "user" ? (
@@ -199,6 +213,7 @@ function Canvas({
   onSave,
   onStarter,
   busy,
+  upcoming,
 }: {
   board: OutfitBoard | null;
   picks: Record<string, ShopOption>;
@@ -206,6 +221,7 @@ function Canvas({
   onSave: () => void;
   onStarter: (t: string) => void;
   busy: boolean;
+  upcoming: React.ReactNode;
 }) {
   // Gaps from the board, plus anything shopped for that the board didn't name.
   const gaps = board ? [...board.gaps.map((g) => g.label), ...shopGaps.filter((s) => !board.gaps.some((g) => g.label === s))] : [];
@@ -222,6 +238,7 @@ function Canvas({
               </button>
             ))}
           </div>
+          {upcoming}
         </div>
       ) : (
         <>
