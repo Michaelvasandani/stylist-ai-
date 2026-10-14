@@ -36,6 +36,7 @@ export const garments = pgTable(
     subcategory: text("subcategory"),
     name: text("name").notNull(),
     colors: text("colors").array().default([]).notNull(),
+    colorHex: text("color_hex"), // dominant colour, for swatches
     pattern: text("pattern"),
     material: text("material"),
     formality: integer("formality"), // 1 lounge … 5 black tie

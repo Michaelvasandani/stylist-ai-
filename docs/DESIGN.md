@@ -59,7 +59,7 @@ The first chic page read like a fashion e-commerce site. The product should feel
    - Search by feel (semantic search, e.g. "something warm and cozy") and a colour filter.
    - **Piece detail:** image, category/shade, tags, times worn, number of looks it's in, formality, date added, and a "Style this piece" button.
 3. **The outfit as a board.** Owned pieces appear with a one-line reason each. A missing piece shows as an empty slot that turns into a Shopify product (price, seller, "pairs with N pieces · M new looks", checkout link).
-4. **Copy a look.** Upload an inspiration image, get a numbered breakdown of pieces, mark what's owned, and offer "Shop" for what's missing.
+4. **Copy a look, inside the stylist.** Not a separate screen (decided 2026-10-14). Attach an inspiration image in the Studio composer and ask the stylist to copy it. The agent returns a numbered breakdown of pieces, marks what's owned, and offers "Shop" for what's missing.
 5. **Music.** An optional lounge track:
    - Off by default (browsers block autoplay anyway). Toggle with the nav button or **M**.
    - **Fades down automatically while the mic is listening**, so it never fights the voice demo.
@@ -87,7 +87,13 @@ Open the HTML files directly in a browser, or serve this folder: `python3 -m htt
 
 The other explorations (playful, minimal, the website-style chic page, and the voice-first "Atelier") stayed local and aren't committed. Atelier's orb states (listening, thinking, speaking) are worth reusing in both versions.
 
-## 8. Open questions
+## 8. Uploading photos
+
+- "Add photos" is a file picker with **multi-select** on desktop and phone (`<input type="file" accept="image/*" multiple>`, no `capture` attribute, so phones offer Photo Library *and* Take Photo). Desktop also accepts drag-and-drop anywhere on the wardrobe.
+- Each photo is downscaled to 1600px in the browser, then sent as its own request (3 in parallel), so pieces stream into the grid and one bad photo doesn't fail the batch.
+- Pieces already in the wardrobe are skipped (same category + embedding distance < 0.12), so several photos of one outfit don't create duplicates.
+
+## 9. Open questions
 
 - Desktop breakpoint, and whether tablet gets the desktop or phone shell (suggestion: desktop at ≥1024px).
 - Whether the canvas supports drag-to-rearrange in v1 or stays a fixed layout.
