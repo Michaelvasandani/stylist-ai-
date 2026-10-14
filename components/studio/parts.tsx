@@ -93,8 +93,16 @@ function MiniBoard({ board }: { board: OutfitBoard }) {
   return (
     <div className="no-scrollbar -mx-5 flex gap-2.5 overflow-x-auto px-5 lg:hidden">
       {board.pieces.map(({ garment: g }) => (
-        <div key={g.id} className="relative aspect-[3/4] w-24 shrink-0 bg-sand">
-          {g.imageUrl && <Image src={g.imageUrl} alt={g.name} fill sizes="96px" className="object-cover" />}
+        <div key={g.id} className="relative aspect-[3/4] w-24 shrink-0 rounded-2xl bg-[radial-gradient(ellipse_at_50%_40%,#fdfbf7,#ebe3d6)]">
+          {g.imageUrl && (
+            <Image
+              src={g.imageUrl}
+              alt={g.name}
+              fill
+              sizes="96px"
+              className={cn("object-contain p-1.5", g.isCutout ? "drop-shadow-[0_6px_6px_rgba(60,45,30,.2)]" : "mix-blend-multiply")}
+            />
+          )}
         </div>
       ))}
       {board.gaps.map((gap) => (

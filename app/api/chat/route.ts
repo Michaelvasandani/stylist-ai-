@@ -21,6 +21,17 @@ export async function POST(req: Request) {
   });
 
   return createUIMessageStreamResponse({
-    stream: toUIMessageStream({ stream: result.stream, originalMessages: messages }),
+    stream: toUIMessageStream({
+      stream: result.stream,
+      originalMessages: messages,
+      // Say why, instead of the SDK's generic "An error occurred."
+      onError: (e) => {
+        console.error("stylist error", e);
+        const status = (e as { statusCode?: number }).statusCode;
+        if (status === 402) return "The AI Gateway budget is used up. Raise it in Vercel → AI Gateway → Budgets.";
+        if (status === 429) return "Too many requests to the AI right now. Try again in a moment.";
+        return e instanceof Error ? e.message : "Something went wrong.";
+      },
+    }),
   });
 }

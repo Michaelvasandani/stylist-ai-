@@ -11,7 +11,8 @@ import { searchWardrobe, toGarmentCard, type GarmentCard } from "@/lib/wardrobe"
 export type OutfitBoard = {
   title: string;
   occasion: string;
-  pieces: { garment: GarmentCard; reason: string }[];
+  // alternates: other pieces the stylist would accept in the same slot, best first.
+  pieces: { garment: GarmentCard; reason: string; alternates?: GarmentCard[] }[];
   gaps: { label: string; category: string; reason: string }[];
 };
 
@@ -96,17 +97,19 @@ export function createStylistTools(userId: string) {
 
     presentOutfit: tool({
       description:
-        "Put an outfit on the user's board. Use only garment ids returned by searchWardrobe. Give each piece a one-line reason. List anything genuinely missing as a gap (don't shop yet).",
+        "Put an outfit on the user's board. Use only garment ids returned by searchWardrobe. Give each piece a one-line reason, plus up to 4 alternates: other ids from searchWardrobe that would also work in that slot, best first, so the user can flip through options. List anything genuinely missing as a gap (don't shop yet).",
       inputSchema: z.object({
         title: z.string().describe('Short editorial name, e.g. "Rooftop, after dark"'),
         occasion: z.string(),
-        pieces: z.array(z.object({ garmentId: z.string(), reason: z.string() })).min(1),
+        pieces: z
+          .array(z.object({ garmentId: z.string(), reason: z.string(), alternates: z.array(z.string()).max(4).default([]) }))
+          .min(1),
         gaps: z
           .array(z.object({ label: z.string().describe('e.g. "a warm camel layer"'), category: z.enum(CATEGORIES), reason: z.string() }))
           .default([]),
       }),
       execute: async ({ title, occasion, pieces, gaps }): Promise<OutfitBoard> => {
-        const ids = pieces.map((p) => p.garmentId).filter((id) => z.uuid().safeParse(id).success);
+        const ids = pieces.flatMap((p) => [p.garmentId, ...p.alternates]).filter((id) => z.uuid().safeParse(id).success);
         const rows = ids.length
           ? await db.select().from(garments).where(and(eq(garments.userId, userId), inArray(garments.id, ids)))
           : [];
@@ -114,7 +117,11 @@ export function createStylistTools(userId: string) {
         return {
           title,
           occasion,
-          pieces: pieces.flatMap((p) => (byId.has(p.garmentId) ? [{ garment: byId.get(p.garmentId)!, reason: p.reason }] : [])),
+          pieces: pieces.flatMap((p) =>
+            byId.has(p.garmentId)
+              ? [{ garment: byId.get(p.garmentId)!, reason: p.reason, alternates: p.alternates.flatMap((id) => byId.get(id) ?? []) }]
+              : [],
+          ),
           gaps,
         };
       },

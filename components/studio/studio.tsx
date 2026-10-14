@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { ArrowUp, Mic, MicOff } from "lucide-react";
@@ -10,7 +9,8 @@ import { cn } from "@/lib/utils";
 import type { OutfitBoard, StylistMessage } from "@/lib/stylist/tools";
 import { TopBar } from "@/components/shell/top-bar";
 import { styleMeFor, UpcomingEvents, useCalendar } from "./calendar";
-import { latestBoard, money, textOf, toolOf, ToolPart, type ShopOption } from "./parts";
+import { OutfitStage } from "./outfit-stage";
+import { latestBoard, textOf, toolOf, ToolPart, type ShopOption } from "./parts";
 import { useVoiceLoop, type VoiceState } from "./use-voice-loop";
 
 const STARTERS = ["Rooftop dinner in SF tonight", "First day at a new job", "Wedding guest, outdoors, October"];
@@ -71,6 +71,7 @@ export function Studio() {
 
   const busy = chat.status === "submitted" || chat.status === "streaming";
   const { board, shop } = useMemo(() => latestBoard(chat.messages), [chat.messages]);
+  const shopOptions = useMemo(() => new Map([...shop].map(([gap, s]) => [gap, s.options])), [shop]);
 
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
@@ -105,8 +106,9 @@ export function Studio() {
         <Canvas
           board={board}
           picks={picks}
-          shopGaps={[...shop.keys()]}
-          onSave={() => send("Save this look, please.")}
+          shop={shopOptions}
+          onPick={pick}
+          onSave={(names) => send(`Save this look as it is on my board now: ${names.join(", ")}.`)}
           onStarter={send}
           busy={busy}
           upcoming={<UpcomingEvents cal={cal} busy={busy} onPick={(e) => send(styleMeFor(e))} onDisconnect={disconnect} className="mt-8" />}
@@ -209,7 +211,8 @@ function Orb({ state, level }: { state: VoiceState | "busy"; level: number }) {
 function Canvas({
   board,
   picks,
-  shopGaps,
+  shop,
+  onPick,
   onSave,
   onStarter,
   busy,
@@ -217,16 +220,17 @@ function Canvas({
 }: {
   board: OutfitBoard | null;
   picks: Record<string, ShopOption>;
-  shopGaps: string[];
-  onSave: () => void;
+  shop: Map<string, ShopOption[]>;
+  onPick: (gap: string, p: ShopOption) => void;
+  onSave: (names: string[]) => void;
   onStarter: (t: string) => void;
   busy: boolean;
   upcoming: React.ReactNode;
 }) {
   // Gaps from the board, plus anything shopped for that the board didn't name.
-  const gaps = board ? [...board.gaps.map((g) => g.label), ...shopGaps.filter((s) => !board.gaps.some((g) => g.label === s))] : [];
+  const gaps = board ? [...board.gaps.map((g) => g.label), ...[...shop.keys()].filter((s) => !board.gaps.some((g) => g.label === s))] : [];
   return (
-    <section className="relative m-5 hidden min-h-0 flex-col overflow-y-auto bg-sand bg-[radial-gradient(rgba(28,26,23,.07)_1px,transparent_1px)] bg-[length:22px_22px] p-6 pb-28 lg:flex">
+    <section className="relative m-5 hidden min-h-0 flex-col overflow-y-auto bg-sand bg-[radial-gradient(rgba(28,26,23,.07)_1px,transparent_1px)] bg-[length:22px_22px] p-6 pb-24 lg:flex">
       {!board ? (
         <div className="m-auto max-w-md text-center">
           <p className="eyebrow text-taupe">Your board</p>
@@ -241,68 +245,17 @@ function Canvas({
           {upcoming}
         </div>
       ) : (
-        <>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="eyebrow text-taupe">{board.occasion}</p>
-              <p className="mt-1 font-serif text-[30px] italic leading-none">{board.title}</p>
-            </div>
-            <button onClick={onSave} disabled={busy} className="btn-chic btn-ghost btn-sm bg-paper">
-              Save look
-            </button>
-          </div>
-          <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-x-4 gap-y-6">
-            {board.pieces.map(({ garment: g, reason }) => (
-              <figure key={g.id} className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                <div className="relative aspect-[3/4] bg-paper shadow-[0_16px_18px_rgba(60,45,30,.12)]">
-                  {g.imageUrl && <Image src={g.imageUrl} alt={g.name} fill sizes="220px" className="object-cover" />}
-                </div>
-                <figcaption className="mt-2.5">
-                  <p className="text-[13px] font-normal">{g.name}</p>
-                  <p className="mt-0.5 font-serif text-[15px] italic leading-snug text-taupe">{reason}</p>
-                </figcaption>
-              </figure>
-            ))}
-            {gaps.map((label) => {
-              const p = picks[label];
-              const reason = board.gaps.find((g) => g.label === label)?.reason;
-              return (
-                <figure key={label} className="animate-in fade-in duration-500">
-                  <div className={cn("relative grid aspect-[3/4] place-items-center p-3 text-center", p ? "border border-ink bg-white" : "border-[1.5px] border-dashed border-taupe")}>
-                    {p?.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- Shopify CDN image
-                      <img src={p.imageUrl} alt={p.title} className="absolute inset-0 size-full object-cover" />
-                    ) : (
-                      <div>
-                        <p className="font-serif text-lg italic leading-tight">Missing:<br />{label}</p>
-                        <p className="eyebrow mt-2 text-taupe">Via Shopify</p>
-                      </div>
-                    )}
-                  </div>
-                  <figcaption className="mt-2.5">
-                    {p ? (
-                      <>
-                        <p className="line-clamp-1 text-[13px] font-normal">{p.title}</p>
-                        <p className="text-xs text-taupe">
-                          {money(p.price)} · {p.seller}
-                          {p.checkoutUrl && (
-                            <a href={p.checkoutUrl} target="_blank" rel="noreferrer" className="ml-2 border-b border-ink text-ink">
-                              Buy
-                            </a>
-                          )}
-                        </p>
-                      </>
-                    ) : (
-                      reason && <p className="font-serif text-[15px] italic leading-snug text-taupe">{reason}</p>
-                    )}
-                  </figcaption>
-                </figure>
-              );
-            })}
-          </div>
-        </>
+        <OutfitStage
+          key={board.title + board.pieces.map((p) => p.garment.id).join()}
+          board={board}
+          gaps={gaps}
+          shop={shop}
+          picks={picks}
+          onPick={onPick}
+          onSave={onSave}
+          busy={busy}
+        />
       )}
-      {busy && board && <p className="eyebrow absolute bottom-4 right-5 text-taupe">Restyling…</p>}
     </section>
   );
 }
