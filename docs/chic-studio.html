@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stylist · C · Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet" />
+<script src="chic-kit.js"></script>
+<style>
+  :root {
+    --bone: #f4f0e9; --paper: #faf8f4; --sand: #e9e2d6; --oat: #ddd3c3; --ink: #1c1a17; --espresso: #161412;
+    --taupe: #857a6c; --line: #e2dacd; --line2: #d6cdbf; --gold: #b8912f;
+    --serif: "Cormorant Garamond", Georgia, serif; --sans: "Jost", "Helvetica Neue", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body { font-family: var(--sans); font-weight: 300; color: var(--ink); background: var(--bone); -webkit-font-smoothing: antialiased; overflow: hidden; font-size: 14px; }
+  button, input { font: inherit; color: inherit; border: 0; background: none; }
+  button { cursor: pointer; }
+  .eyebrow { font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; font-weight: 400; }
+  .mute { color: var(--taupe); }
+  .serif { font-family: var(--serif); }
+  svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+
+  .app { height: 100vh; display: grid; grid-template-columns: 76px 1fr; }
+  .rail { background: var(--espresso); color: #b9ae9f; display: flex; flex-direction: column; align-items: center; padding: 20px 0; gap: 6px; }
+  .rail .logo { font-family: var(--serif); font-size: 30px; color: var(--bone); margin-bottom: 22px; }
+  .rail button { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 14px; position: relative; transition: background .2s, color .2s; }
+  .rail button:hover { color: var(--bone); background: #24201c; }
+  .rail button.on { color: var(--bone); background: #2c2722; }
+  .rail button.on::before { content: ""; position: absolute; left: -12px; top: 14px; bottom: 14px; width: 2px; background: #c9a24a; }
+  .rail .tip { position: absolute; left: 62px; background: var(--ink); color: var(--bone); padding: 5px 10px; white-space: nowrap; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; opacity: 0; pointer-events: none; transition: opacity .15s; z-index: 50; }
+  .rail button:hover .tip { opacity: 1; }
+  .rail .grow { flex: 1; }
+  .rail .music.on { color: #c9a24a; }
+  .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
+  .eq i { width: 2px; height: 4px; background: currentColor; }
+  .on .eq i { animation: eq .9s ease-in-out infinite alternate; }
+  .on .eq i:nth-child(2) { animation-delay: -.3s; } .on .eq i:nth-child(3) { animation-delay: -.6s; }
+  @keyframes eq { to { height: 14px; } }
+
+  .main { position: relative; overflow: hidden; }
+  .view { position: absolute; inset: 0; display: none; }
+  .view.on { display: flex; animation: fade .4s ease; }
+  @keyframes fade { from { opacity: 0; } }
+  .topbar { display: flex; justify-content: space-between; align-items: center; height: 64px; padding: 0 32px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .topbar .crumb { display: flex; gap: 14px; align-items: baseline; }
+  .topbar h1 { font-family: var(--serif); font-weight: 400; font-size: 24px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 22px; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; font-weight: 400; background: var(--ink); color: var(--bone); }
+  .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line2); }
+  .btn.sm { height: 36px; padding: 0 16px; }
+
+  /* ---------- home / onboarding ---------- */
+  #home { flex-direction: column; overflow-y: auto; }
+  .welcome { padding: 56px 56px 0; display: flex; justify-content: space-between; align-items: flex-end; gap: 40px; }
+  .welcome h2 { font-family: var(--serif); font-weight: 300; font-size: clamp(44px, 5vw, 72px); line-height: .95; }
+  .welcome h2 em { color: var(--gold); }
+  .progress { min-width: 260px; }
+  .progress .bar { height: 2px; background: var(--line2); margin-top: 10px; }
+  .progress .bar i { display: block; height: 100%; background: var(--ink); transition: width .6s; }
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 40px 56px; }
+  .step { background: var(--paper); border: 1px solid var(--line); display: flex; flex-direction: column; transition: border-color .2s, transform .2s; }
+  .step:hover { border-color: var(--ink); transform: translateY(-2px); }
+  .step .vis { height: 190px; background: var(--sand); position: relative; overflow: hidden; display: grid; place-items: center; }
+  .step .vis svg { position: absolute; }
+  .step .b { padding: 20px; display: flex; flex-direction: column; flex: 1; }
+  .step .h { display: flex; justify-content: space-between; }
+  .step h3 { font-family: var(--serif); font-weight: 400; font-size: 26px; line-height: 1.05; margin-top: 12px; }
+  .step p { color: var(--taupe); line-height: 1.5; margin-top: 8px; }
+  .step .btn { margin-top: auto; align-self: flex-start; }
+  .step .gap-top { margin-top: 18px; }
+  .status { display: inline-flex; gap: 6px; align-items: center; }
+  .status.done { color: var(--gold); }
+  .step.done .vis::after { content: "✓"; position: absolute; top: 12px; right: 12px; width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: var(--bone); display: grid; place-items: center; font-size: 12px; }
+  .strip { padding: 0 56px 56px; }
+  .strip .row { display: flex; gap: 10px; margin-top: 14px; overflow-x: auto; }
+  .strip .row div { flex: 0 0 88px; aspect-ratio: 3/4; background: var(--sand); display: grid; place-items: center; }
+  .strip .row svg { width: 66%; }
+  @media (max-width: 1100px) { .steps { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ---------- wardrobe ---------- */
+  #wardrobe { flex-direction: column; }
+  .w-body { flex: 1; display: grid; grid-template-columns: 230px 1fr auto; grid-template-rows: minmax(0, 1fr); min-height: 0; }
+  .filters { border-right: 1px solid var(--line); padding: 28px 24px; overflow-y: auto; }
+  .filters h4 { margin-bottom: 12px; }
+  .cat { display: flex; justify-content: space-between; width: 100%; padding: 8px 0; color: var(--taupe); text-align: left; }
+  .cat.on, .cat:hover { color: var(--ink); }
+  .cat.on { font-weight: 400; }
+  .subs { padding: 2px 0 8px 14px; border-left: 1px solid var(--line2); margin-left: 2px; }
+  .subs button { display: flex; justify-content: space-between; width: 100%; padding: 5px 0; font-family: var(--serif); font-size: 16px; color: var(--taupe); }
+  .subs button.on { color: var(--ink); }
+  .subs button.on span:first-child::before { content: "— "; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .swatches i { width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(0,0,0,.12); }
+  .w-grid { overflow-y: auto; padding: 24px 28px 40px; }
+  .search { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line2); padding: 8px 0; color: var(--taupe); max-width: 520px; }
+  .search input { flex: 1; outline: 0; font-family: var(--serif); font-style: italic; font-size: 19px; color: var(--ink); }
+  .search input::placeholder { color: var(--taupe); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 24px 14px; margin-top: 24px; }
+  .tile { cursor: pointer; }
+  .tile .img { aspect-ratio: 3/4; background: var(--sand); display: grid; place-items: center; outline: 1px solid transparent; transition: outline-color .2s, background .2s; }
+  .tile:hover .img { background: var(--oat); }
+  .tile.sel .img { outline-color: var(--ink); }
+  .tile .img svg { width: 62%; }
+  .tile .nm { font-weight: 400; margin-top: 10px; font-size: 13px; }
+  .tile .sh { color: var(--taupe); font-size: 12px; }
+  .detail { width: 0; overflow: hidden; border-left: 1px solid var(--line); background: var(--paper); transition: width .35s cubic-bezier(.2,.8,.2,1); }
+  .detail.open { width: 360px; }
+  .detail .in { width: 360px; padding: 24px; height: 100%; overflow-y: auto; }
+  .detail .hero { aspect-ratio: 1; background: var(--sand); display: grid; place-items: center; margin-top: 14px; }
+  .detail .hero svg { width: 64%; }
+  .detail h3 { font-family: var(--serif); font-weight: 300; font-size: 32px; line-height: 1; margin-top: 16px; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .tags span { font-size: 11.5px; border: 1px solid var(--line2); padding: 3px 9px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line2); border-bottom: 1px solid var(--line2); margin: 18px 0; }
+  .stats div { padding: 12px 0; text-align: center; }
+  .stats div + div { border-left: 1px solid var(--line2); }
+  .stats b { display: block; font-family: var(--serif); font-weight: 400; font-size: 26px; line-height: 1; }
+
+  /* ---------- studio ---------- */
+  #studio { flex-direction: column; }
+  .s-body { flex: 1; display: grid; grid-template-columns: 1fr 380px; grid-template-rows: minmax(0, 1fr); min-height: 0; }
+  .canvas-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .canvas { flex: 1; position: relative; margin: 20px 20px 0; background: var(--sand); background-image: radial-gradient(rgba(28,26,23,.07) 1px, transparent 1px); background-size: 22px 22px; overflow: hidden; }
+  .canvas .label { position: absolute; left: 22px; top: 18px; }
+  .canvas .label p.serif { font-size: 30px; font-style: italic; line-height: 1; margin-top: 4px; }
+  .canvas .tools { position: absolute; right: 16px; top: 16px; display: flex; gap: 6px; }
+  .canvas .tools button { height: 32px; padding: 0 12px; background: var(--paper); border: 1px solid var(--line2); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; }
+  .piece { position: absolute; cursor: grab; transition: opacity .5s, transform .5s; user-select: none; }
+  .piece:active { cursor: grabbing; }
+  .piece svg { width: 100%; filter: drop-shadow(0 16px 18px rgba(60,45,30,.18)); pointer-events: none; }
+  .piece .cap { position: absolute; left: 50%; transform: translateX(-50%); bottom: -16px; white-space: nowrap; font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--taupe); }
+  .piece.hidden { opacity: 0; transform: scale(.9) translateY(10px); }
+  .gap-slot { position: absolute; border: 1.5px dashed var(--taupe); display: grid; place-items: center; text-align: center; padding: 10px; transition: opacity .4s; }
+  .gap-slot .serif { font-size: 18px; font-style: italic; }
+  .inspo-card { position: absolute; left: 22px; bottom: 22px; width: 190px; background: var(--paper); padding: 8px 8px 10px; box-shadow: 0 18px 30px rgba(60,45,30,.16); transform: rotate(-3deg); transition: opacity .4s; }
+  .inspo-card .ph { height: 230px; background: linear-gradient(180deg, #8b8276, #2b2622); position: relative; overflow: hidden; }
+  .inspo-card .ph svg { position: absolute; }
+  .tray { height: 150px; margin: 14px 20px 20px; display: flex; flex-direction: column; }
+  .tray-head { display: flex; gap: 18px; align-items: baseline; }
+  .tray-head button { color: var(--taupe); padding-bottom: 4px; border-bottom: 1px solid transparent; }
+  .tray-head button.on { color: var(--ink); border-color: var(--ink); }
+  .tray-head .subs2 { display: flex; gap: 12px; margin-left: 8px; padding-left: 16px; border-left: 1px solid var(--line2); }
+  .tray-head .subs2 button { font-family: var(--serif); font-size: 15px; letter-spacing: 0; text-transform: none; }
+  .tray-row { display: flex; gap: 10px; margin-top: 12px; overflow-x: auto; flex: 1; }
+  .tray-row div { flex: 0 0 82px; background: var(--paper); border: 1px solid var(--line); display: grid; place-items: center; cursor: grab; position: relative; }
+  .tray-row div.used::after { content: ""; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
+  .tray-row svg { width: 66%; }
+
+  .panel { border-left: 1px solid var(--line); background: var(--paper); display: flex; flex-direction: column; min-height: 0; }
+  .p-head { display: flex; align-items: center; gap: 14px; padding: 18px 22px; border-bottom: 1px solid var(--line); }
+  .orb { width: 40px; height: 40px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #f6e8c6, #c9a24a 45%, #5e481d 100%); flex-shrink: 0; animation: breathe 4s ease-in-out infinite; }
+  .listening .orb { animation-duration: 1.1s; box-shadow: 0 0 0 6px rgba(201,162,74,.18), 0 0 0 12px rgba(201,162,74,.07); }
+  @keyframes breathe { 50% { transform: scale(1.08); } }
+  .thread { flex: 1; overflow-y: auto; padding: 22px; display: flex; flex-direction: column; gap: 18px; }
+  .msg-me { align-self: flex-end; max-width: 88%; background: var(--ink); color: var(--bone); padding: 12px 14px; font-family: var(--serif); font-style: italic; font-size: 17px; line-height: 1.3; }
+  .msg-me .eyebrow { display: block; font-family: var(--sans); font-style: normal; color: #9b8f80; margin-bottom: 6px; }
+  .msg-ai { font-family: var(--serif); font-size: 19px; line-height: 1.35; }
+  .toolrow { display: flex; flex-direction: column; gap: 6px; }
+  .toolrow span { display: flex; gap: 8px; align-items: center; color: var(--taupe); font-size: 12.5px; }
+  .toolrow span::before { content: "✓"; color: var(--gold); }
+  .live { font-family: var(--serif); font-style: italic; font-size: 22px; line-height: 1.25; color: var(--ink); }
+  .live::after { content: "▍"; color: var(--gold); animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .match { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .match .th { width: 44px; height: 54px; background: var(--sand); display: grid; place-items: center; }
+  .match .th svg { width: 74%; }
+  .match .th.empty { background: transparent; border: 1px dashed var(--taupe); }
+  .prod { border: 1px solid var(--ink); background: #fff; }
+  .prod .img { height: 170px; background: var(--oat); display: grid; place-items: center; }
+  .prod .img svg { height: 86%; }
+  .prod .b { padding: 14px; }
+  .prod h4 { font-family: var(--serif); font-weight: 400; font-size: 22px; line-height: 1.05; }
+  .prod .row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; }
+  .prod .row b { font-family: var(--serif); font-weight: 400; font-size: 22px; }
+  .prod .u { color: var(--taupe); font-size: 12.5px; margin-top: 8px; }
+  .prod .u b { color: var(--gold); font-weight: 400; }
+  .composer { border-top: 1px solid var(--line); padding: 14px 16px; display: flex; gap: 6px; align-items: center; }
+  .composer input { flex: 1; min-width: 0; outline: 0; font-family: var(--serif); font-style: italic; font-size: 17px; height: 40px; }
+  .composer input::placeholder { color: var(--taupe); }
+  .ibtn { width: 38px; height: 38px; display: grid; place-items: center; color: var(--taupe); border-radius: 50%; transition: background .2s, color .2s; }
+  .ibtn:hover { background: var(--sand); color: var(--ink); }
+  .mic { width: 44px; height: 44px; border-radius: 50%; background: var(--ink); color: var(--bone); display: grid; place-items: center; }
+  .listening .mic { background: #c9a24a; color: var(--ink); }
+
+  .hint { position: fixed; left: 50%; transform: translateX(-50%); top: 18px; background: var(--ink); color: var(--bone); padding: 8px 12px; z-index: 60; opacity: .85; }
+  .powered { color: var(--taupe); }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <nav class="rail">
+    <span class="logo">S</span>
+    <button data-nav="home"><svg class="i" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9H4z"/></svg><span class="tip">Get started</span></button>
+    <button data-nav="wardrobe"><svg class="i" viewBox="0 0 24 24"><path d="M12 4a2 2 0 1 1 2 2c-1 0-2 .6-2 1.5V9M3 19l9-8 9 8z"/></svg><span class="tip">Wardrobe</span></button>
+    <button data-nav="studio"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16"/><path d="M8 4v16M3 10h5"/></svg><span class="tip">Studio</span></button>
+    <button data-nav="copy"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"/><path d="M4 16l5-5 4 4 3-3 4 4"/></svg><span class="tip">Copy a look</span></button>
+    <button><svg class="i" viewBox="0 0 24 24"><path d="M6 4h12v16l-6-4-6 4z"/></svg><span class="tip">Saved looks</span></button>
+    <span class="grow"></span>
+    <button class="music" data-music><span class="eq"><i></i><i></i><i></i></span><span class="tip">Late lounge</span></button>
+  </nav>
+
+  <div class="main">
+    <!-- onboarding -->
+    <section class="view" id="home">
+      <div class="welcome">
+        <div>
+          <p class="eyebrow mute">Wednesday · San Francisco · 58°</p>
+          <h2 style="margin-top:14px">Let's build your<br /><em>wardrobe.</em></h2>
+        </div>
+        <div class="progress"><p class="eyebrow mute" id="progLabel"></p><div class="bar"><i id="progBar"></i></div></div>
+      </div>
+      <div class="steps" id="steps"></div>
+      <div class="strip">
+        <p class="eyebrow mute">In your wardrobe so far</p>
+        <div class="row" id="strip"></div>
+      </div>
+    </section>
+
+    <!-- wardrobe -->
+    <section class="view" id="wardrobe">
+      <div style="display:flex;flex-direction:column;flex:1;min-width:0;min-height:0">
+        <div class="topbar"><div class="crumb"><h1>Wardrobe</h1><span class="eyebrow mute" id="wcount"></span></div><button class="btn sm" data-nav="home"><svg class="i" viewBox="0 0 24 24" style="width:16px"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Add pieces</button></div>
+        <div class="w-body">
+          <aside class="filters">
+            <h4 class="eyebrow mute">Category</h4>
+            <div id="catList"></div>
+            <h4 class="eyebrow mute" style="margin-top:24px">Colour</h4>
+            <div class="swatches" id="swatches"></div>
+          </aside>
+          <div class="w-grid">
+            <div class="search"><svg class="i" viewBox="0 0 24 24" style="width:18px"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg><input placeholder="Search by feel — “something warm and cozy”" /></div>
+            <div class="grid" id="grid"></div>
+          </div>
+          <aside class="detail" id="detail"><div class="in" id="detailIn"></div></aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- studio -->
+    <section class="view" id="studio">
+      <div style="display:flex;flex-direction:column;flex:1;min-width:0;min-height:0">
+        <div class="topbar"><div class="crumb"><h1>Studio</h1><span class="eyebrow mute">Look 01 · Rooftop dinner</span></div><span class="eyebrow powered">Vercel · Neon · Shopify · AI Gateway</span></div>
+        <div class="s-body">
+          <div class="canvas-col">
+            <div class="canvas" id="canvas">
+              <div class="label"><p class="eyebrow mute">Look 01</p><p class="serif">Rooftop, after dark</p></div>
+              <div class="tools"><button>Shuffle</button><button>Save look</button></div>
+            </div>
+            <div class="tray">
+              <div class="tray-head eyebrow" id="trayHead"></div>
+              <div class="tray-row" id="tray"></div>
+            </div>
+          </div>
+          <aside class="panel" id="panel">
+            <div class="p-head"><span class="orb"></span><div><p style="font-weight:400">Stylist</p><p class="eyebrow mute" id="pstate">Ready</p></div></div>
+            <div class="thread" id="thread"></div>
+            <div class="composer">
+              <button class="ibtn" title="Snap"><svg class="i" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+              <button class="ibtn" title="Inspiration" data-nav="copy"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"/><path d="M4 16l5-5 4 4 3-3 4 4"/></svg></button>
+              <input placeholder="Ask, or hold to speak" />
+              <button class="mic" data-nav="listen"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+<div class="hint eyebrow" id="hint"></div>
+
+<script>
+  const { art, CATEGORIES, WARDROBE, OUTFIT, MISSING, INSPO, FEATURES, PROMPT, byId, filterWardrobe, Music } = Kit;
+  const $ = (s) => document.querySelector(s);
+  const app = $("#app");
+
+  const STEPS = [
+    { key: "home", label: "Get started", view: "home", done: 0 },
+    { key: "snapped", label: "Wardrobe photographed", view: "home", done: 1 },
+    { key: "wardrobe", label: "Wardrobe", view: "wardrobe", cat: "All" },
+    { key: "detail", label: "Piece detail", view: "wardrobe", cat: "All", detail: "g1" },
+    { key: "acc", label: "Accessories · Glasses", view: "wardrobe", cat: "Accessories", sub: "Glasses", detail: "a4" },
+    { key: "listen", label: "Ask by voice", view: "studio", phase: "listen" },
+    { key: "look", label: "Look on the canvas", view: "studio", phase: "look" },
+    { key: "copy", label: "Copy a look", view: "studio", phase: "copy" },
+    { key: "shop", label: "Shop the gap", view: "studio", phase: "shop" },
+  ];
+  let cur = 0, cat = "All", sub = "All", sel = null, trayCat = "All", trayTimers = [];
+
+  function go(i) {
+    cur = Math.max(0, Math.min(STEPS.length - 1, i));
+    const s = STEPS[cur];
+    trayTimers.forEach(clearTimeout); trayTimers = [];
+    document.querySelectorAll(".view").forEach((v) => v.classList.toggle("on", v.id === s.view));
+    document.querySelectorAll("[data-nav]").forEach((b) => b.classList.toggle("on", b.closest(".rail") && (b.dataset.nav === s.view || (s.phase === "copy" && b.dataset.nav === "copy" )) && !(s.phase === "copy" && b.dataset.nav === "studio")));
+    if (s.view === "home") renderHome(s.done);
+    if (s.view === "wardrobe") { cat = s.cat; sub = s.sub || "All"; sel = s.detail || null; renderWardrobe(); }
+    if (s.view === "studio") renderStudio(s.phase);
+    app.classList.toggle("listening", s.phase === "listen");
+    Music.duck(s.phase === "listen");
+    $("#hint").textContent = `${String(cur + 1).padStart(2, "0")} / ${STEPS.length} · ${s.label} · ← → step · M music`;
+  }
+  const stepTo = (key) => go(STEPS.findIndex((s) => s.key === key));
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT") return;
+    if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); go(cur + 1); }
+    if (e.key === "ArrowLeft") go(cur - 1);
+    if (e.key.toLowerCase() === "m") Music.toggle();
+  });
+  document.addEventListener("click", (e) => {
+    const n = e.target.closest("[data-nav]");
+    if (n) stepTo({ home: "home", wardrobe: "wardrobe", studio: "look", copy: "copy", listen: "listen" }[n.dataset.nav]);
+    const g = e.target.closest("[data-goto]"); if (g) stepTo(g.dataset.goto);
+    if (e.target.closest("[data-music]")) Music.toggle();
+    const c = e.target.closest("[data-cat]"); if (c) { cat = c.dataset.cat; sub = "All"; renderWardrobe(); }
+    const sb = e.target.closest("[data-sub]"); if (sb) { sub = sb.dataset.sub; renderWardrobe(); }
+    const p = e.target.closest("[data-piece]"); if (p) { sel = sel === p.dataset.piece ? null : p.dataset.piece; renderWardrobe(); }
+    const tc = e.target.closest("[data-tcat]"); if (tc) { trayCat = tc.dataset.tcat; renderTray(); }
+  });
+  Music.onChange((on) => document.querySelectorAll("[data-music]").forEach((b) => b.classList.toggle("on", on)));
+
+  // ---------- onboarding ----------
+  const VIS = [
+    () => art("overshirt", "#2f3e5c", "width:44%;left:28%;top:12%") + `<span style="position:absolute;left:26%;top:9%;width:48%;height:78%;border:1.5px solid var(--ink)"></span>`,
+    () => `<div style="display:flex;gap:4px;align-items:center;height:70px">${Array.from({ length: 22 }, (_, i) => `<i style="width:3px;background:var(--ink);height:${12 + Math.abs(Math.sin(i * .7)) * 50}px"></i>`).join("")}</div>`,
+    () => `<div style="width:110px;height:150px;background:linear-gradient(#8b8276,#2b2622);position:relative;transform:rotate(-4deg)">${art("coat", MISSING.color, "width:90%;left:5%;top:6%")}</div>`,
+    () => art("coat", MISSING.color, "height:80%;left:50%;top:10%;transform:translateX(-50%)"),
+  ];
+  const ACT = [["Photograph", "snapped"], ["Ask by voice", "listen"], ["Add inspiration", "copy"], ["See the gap", "shop"]];
+  function renderHome(done) {
+    $("#progLabel").textContent = `${done} of 4 complete`;
+    $("#progBar").style.width = `${(done / 4) * 100}%`;
+    $("#steps").innerHTML = FEATURES.map((f, i) => {
+      const isDone = i < done, next = i === done;
+      return `<article class="step ${isDone ? "done" : ""}"><div class="vis">${VIS[i]()}</div><div class="b">
+        <div class="h eyebrow"><span class="mute">${f.n} · ${f.mode}</span><span class="status ${isDone ? "done" : ""}">${isDone ? "Done" : next ? "Next" : ""}</span></div>
+        <h3>${f.title}</h3><p>${f.body}</p>
+        <div class="gap-top"></div>
+        <button class="btn ${next ? "" : "ghost"} sm" data-goto="${isDone && i === 0 ? "wardrobe" : ACT[i][1]}">${isDone && i === 0 ? "View wardrobe" : ACT[i][0]}</button></div></article>`;
+    }).join("");
+    const have = done ? WARDROBE : [];
+    $("#strip").innerHTML = have.length ? have.map((g) => `<div>${art(g.kind, g.color)}</div>`).join("")
+      : `<p class="serif mute" style="font-size:20px;font-style:italic">Nothing yet. Start with a mirror photo.</p>`;
+  }
+
+  // ---------- wardrobe ----------
+  $("#wcount").textContent = `${WARDROBE.length} pieces`;
+  $("#swatches").innerHTML = [...new Set(WARDROBE.map((g) => g.color))].slice(0, 12).map((c) => `<i style="background:${c}"></i>`).join("");
+  function renderWardrobe() {
+    $("#catList").innerHTML = CATEGORIES.map((c) => {
+      const count = c.name === "All" ? WARDROBE.length : WARDROBE.filter((g) => g.cat === c.name).length;
+      const subs = c.subs && c.name === cat ? `<div class="subs">${c.subs.map((s) => {
+        const n = s === "All" ? count : WARDROBE.filter((g) => g.sub === s).length;
+        return `<button class="${s === sub ? "on" : ""}" data-sub="${s}"><span>${s}</span><span class="mute">${n}</span></button>`; }).join("")}</div>` : "";
+      return `<button class="cat ${c.name === cat ? "on" : ""}" data-cat="${c.name}"><span>${c.name}</span><span>${count}</span></button>${subs}`;
+    }).join("");
+    $("#grid").innerHTML = filterWardrobe(cat, sub).map((g) => `<article class="tile ${g.id === sel ? "sel" : ""}" data-piece="${g.id}"><div class="img">${art(g.kind, g.color)}</div><p class="nm">${g.name}</p><p class="sh">${g.shade}</p></article>`).join("")
+      || `<p class="serif mute" style="font-size:20px">Nothing here yet.</p>`;
+    $("#detail").classList.toggle("open", !!sel);
+    if (!sel) return;
+    const g = byId(sel), d = Kit.details(sel);
+    $("#detailIn").innerHTML = `<p class="eyebrow mute">${g.sub || g.cat} · ${g.shade}</p><div class="hero">${art(g.kind, g.color)}</div>
+      <h3>${g.name}</h3><div class="tags">${d.tags.map((t) => `<span>${t}</span>`).join("")}</div>
+      <div class="stats"><div><b>${d.worn}</b><span class="eyebrow mute">Worn</span></div><div><b>${d.looks}</b><span class="eyebrow mute">Looks</span></div><div><b>${d.formality}/5</b><span class="eyebrow mute">Formal</span></div></div>
+      <p class="eyebrow mute">${d.added}</p>
+      <button class="btn" style="width:100%;margin-top:18px" data-goto="look">Style this piece</button>`;
+  }
+
+  // ---------- studio ----------
+  const LAYOUT = { g1: [8, 18, 22], g2: [30, 24, 15], g3: [44, 20, 16], g7: [44, 66, 18], a2: [27, 60, 12] };
+  function renderTray() {
+    const subs = CATEGORIES.find((c) => c.name === trayCat)?.subs;
+    $("#trayHead").innerHTML = CATEGORIES.map((c) => `<button class="${c.name === trayCat ? "on" : ""}" data-tcat="${c.name}">${c.name}</button>`).join("")
+      + (subs ? `<span class="subs2">${subs.slice(1).map((s) => `<button>${s}</button>`).join("")}</span>` : "");
+    const used = OUTFIT.map((o) => o.id);
+    $("#tray").innerHTML = filterWardrobe(trayCat).map((g) => `<div class="${used.includes(g.id) ? "used" : ""}" title="${g.name}">${art(g.kind, g.color)}</div>`).join("");
+  }
+  renderTray();
+
+  function renderStudio(phase) {
+    const canvas = $("#canvas");
+    canvas.querySelectorAll(".piece,.gap-slot,.inspo-card").forEach((el) => el.remove());
+    const showLook = phase !== "listen";
+    OUTFIT.forEach((o, i) => {
+      const g = byId(o.id), [x, y, w] = LAYOUT[o.id];
+      const el = document.createElement("div");
+      el.className = "piece hidden";
+      el.style.cssText = `left:${x}%;top:${y}%;width:${w}%`;
+      el.innerHTML = art(g.kind, g.color) + `<span class="cap">${g.name}</span>`;
+      canvas.appendChild(el);
+      drag(el);
+      if (showLook) trayTimers.push(setTimeout(() => el.classList.remove("hidden"), 120 + i * 140));
+    });
+    if (showLook) canvas.insertAdjacentHTML("beforeend", `<div class="gap-slot" style="left:66%;top:16%;width:22%;height:58%;${phase === "shop" ? "border-color:var(--ink);border-style:solid;background:rgba(255,255,255,.4)" : ""}">
+      ${phase === "shop" ? art(MISSING.kind, MISSING.color, "width:90%") : `<div><p class="serif">Missing:<br/>a warm layer</p><p class="eyebrow mute" style="margin-top:8px">Via Shopify</p></div>`}</div>`);
+    if (phase === "copy") canvas.insertAdjacentHTML("beforeend", `<div class="inspo-card"><div class="ph">${art("coat", MISSING.color, "width:80%;left:10%;top:6%")}${art("chinos", "#23221f", "width:44%;left:28%;top:56%")}</div><p class="eyebrow mute" style="margin-top:8px">Inspiration · Paris</p></div>`);
+
+    const t = $("#thread");
+    const me = (label, text) => `<div class="msg-me"><span class="eyebrow">${label}</span>${text}</div>`;
+    const tools = `<div class="toolrow"><span>Forecast · 58° windy</span><span>Wardrobe · 16 pieces</span><span>Shopify · 1 gap</span></div>`;
+    const reply = `<p class="msg-ai">Relaxed but dinner-ready: linen for ease, long sleeves for the wind, suede and a little gold to finish. You need one warm layer.</p>`;
+    $("#pstate").textContent = { listen: "Listening · music lowered", look: "Look ready", copy: "Matching", shop: "Found on Shopify" }[phase];
+    if (phase === "listen") {
+      t.innerHTML = `<p class="live" id="live"></p>`;
+      let n = 0; const type = () => { $("#live") && ($("#live").textContent = PROMPT.slice(0, ++n)); if (n < PROMPT.length) trayTimers.push(setTimeout(type, 40)); }; type();
+      return;
+    }
+    let html = me("Voice · 0:04", `“${PROMPT}”`) + tools + reply;
+    if (phase === "copy" || phase === "shop") {
+      html += me("Image", "Can I copy this look?") + `<div>${INSPO.pieces.map((p) => { const g = p.match && byId(p.match);
+        return `<div class="match"><div class="th ${g ? "" : "empty"}">${g ? art(g.kind, g.color) : ""}</div><div><p>${p.label}</p><p class="mute" style="font-size:12px">${g ? g.name : "Not in your wardrobe"}</p></div>${g ? '<span style="color:var(--gold)">✓</span>' : '<button class="eyebrow" style="border-bottom:1px solid var(--ink)" data-goto="shop">Shop</button>'}</div>`; }).join("")}</div>`;
+    }
+    if (phase === "shop") {
+      html += `<div class="prod"><div class="img">${art(MISSING.kind, MISSING.color)}</div><div class="b"><p class="eyebrow mute">Via Shopify · ${MISSING.seller}</p><h4 style="margin-top:6px">${MISSING.title}</h4>
+        <div class="row"><span class="mute">Size S</span><b>${MISSING.price}</b></div><p class="u"><b>✦</b> ${MISSING.unlocks}</p><button class="btn" style="width:100%;margin-top:12px">Checkout on Shopify</button></div></div>`;
+    }
+    t.innerHTML = html;
+    t.scrollTop = t.scrollHeight;
+  }
+
+  // simple pointer drag for canvas pieces
+  function drag(el) {
+    el.addEventListener("pointerdown", (e) => {
+      const c = $("#canvas").getBoundingClientRect(), r = el.getBoundingClientRect();
+      const dx = e.clientX - r.left, dy = e.clientY - r.top;
+      el.setPointerCapture(e.pointerId);
+      const move = (ev) => { el.style.left = `${((ev.clientX - dx - c.left) / c.width) * 100}%`; el.style.top = `${((ev.clientY - dy - c.top) / c.height) * 100}%`; };
+      const up = () => { el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); };
+      el.addEventListener("pointermove", move); el.addEventListener("pointerup", up);
+    });
+  }
+
+  go(+location.hash.slice(1) || 0);
+  addEventListener("hashchange", () => go(+location.hash.slice(1) || 0));
+</script>
+</body>
+</html>
