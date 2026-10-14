@@ -155,7 +155,7 @@ export function Studio() {
           </div>
 
           <form
-            className="flex items-center gap-1.5 border-t border-line px-4 py-3.5"
+            className="flex items-center gap-1.5 border-t border-line px-4 pb-24 pt-3.5 lg:pb-3.5"
             onSubmit={(e) => {
               e.preventDefault();
               send(input);
@@ -226,7 +226,7 @@ function Canvas({
   // Gaps from the board, plus anything shopped for that the board didn't name.
   const gaps = board ? [...board.gaps.map((g) => g.label), ...shopGaps.filter((s) => !board.gaps.some((g) => g.label === s))] : [];
   return (
-    <section className="relative m-5 hidden min-h-0 flex-col overflow-y-auto bg-sand bg-[radial-gradient(rgba(28,26,23,.07)_1px,transparent_1px)] bg-[length:22px_22px] p-6 lg:flex">
+    <section className="relative m-5 hidden min-h-0 flex-col overflow-y-auto bg-sand bg-[radial-gradient(rgba(28,26,23,.07)_1px,transparent_1px)] bg-[length:22px_22px] p-6 pb-28 lg:flex">
       {!board ? (
         <div className="m-auto max-w-md text-center">
           <p className="eyebrow text-taupe">Your board</p>

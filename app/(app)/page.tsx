@@ -1,5 +1,6 @@
-import { Onboarding } from "@/components/home/onboarding";
+import { Wardrobe } from "@/components/wardrobe/wardrobe";
 
-export default function HomePage() {
-  return <Onboarding />;
+// The wardrobe is the app's home screen.
+export default function WardrobePage() {
+  return <Wardrobe />;
 }

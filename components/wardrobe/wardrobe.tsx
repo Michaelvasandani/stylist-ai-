@@ -126,7 +126,7 @@ export function Wardrobe() {
 
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-[230px_1fr_auto]">
         {/* Filters (desktop) */}
-        <aside className="hidden overflow-y-auto border-r border-line px-6 py-7 lg:block">
+        <aside className="hidden overflow-y-auto border-r border-line px-6 pb-28 pt-7 lg:block">
           <h4 className="eyebrow mb-3 text-taupe">Category</h4>
           {UI_CATEGORIES.map(({ name }) => (
             <div key={name}>
@@ -184,7 +184,7 @@ export function Wardrobe() {
         </aside>
 
         {/* Grid */}
-        <div className="overflow-y-auto px-4 pb-10 pt-5 lg:px-7 lg:pt-6">
+        <div className="overflow-y-auto px-4 pb-28 pt-5 lg:px-7 lg:pt-6">
           {/* Category chips (phone) */}
           <div className="no-scrollbar -mx-4 mb-1 flex gap-4 overflow-x-auto px-4 lg:hidden">
             {UI_CATEGORIES.map(({ name }) => (

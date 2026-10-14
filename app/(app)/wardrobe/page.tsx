@@ -1,5 +1,6 @@
-import { Wardrobe } from "@/components/wardrobe/wardrobe";
+import { redirect } from "next/navigation";
 
-export default function WardrobePage() {
-  return <Wardrobe />;
+// Wardrobe moved to "/"; keep old links working.
+export default function WardrobeRedirect() {
+  redirect("/");
 }
