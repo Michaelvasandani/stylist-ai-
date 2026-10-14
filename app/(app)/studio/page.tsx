@@ -1,5 +1,11 @@
-import { ComingSoon } from "@/components/shell/top-bar";
+import { Suspense } from "react";
+import { Studio } from "@/components/studio/studio";
 
+// The chat client creates random ids, so render it per request rather than at prerender.
 export default function StudioPage() {
-  return <ComingSoon title="Studio" body="Ask your stylist for a look, built from what you own." />;
+  return (
+    <Suspense>
+      <Studio />
+    </Suspense>
+  );
 }

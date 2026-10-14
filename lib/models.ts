@@ -6,5 +6,7 @@ export const MODELS = {
   embedding: "openai/text-embedding-3-small", // 1536-d, matches garments.embedding
   imageEdit: "google/gemini-3.1-flash-image", // cutouts + try-on
   outfitImage: "meta/muse-image-1.0",
-  realtime: "openai/gpt-realtime-2",
+  realtime: "openai/gpt-realtime-2", // needs a Gateway API key to mint client secrets (OIDC can't)
+  transcription: "openai/gpt-4o-mini-transcribe", // voice loop: speech → text
+  speech: "openai/tts-1", // voice loop: text → speech
 } as const;
