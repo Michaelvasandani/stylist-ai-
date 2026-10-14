@@ -17,7 +17,8 @@ export type GarmentCard = {
   warmth: number | null;
   seasons: string[];
   styleTags: string[];
-  imageUrl: string | null;
+  imageUrl: string | null; // transparent PNG cutout once ready, else the raw crop
+  isCutout: boolean;
   createdAt: string;
   score?: number; // semantic match, 0-1, when searching
 };
@@ -37,6 +38,7 @@ export function toGarmentCard(g: Garment & { score?: number }): GarmentCard {
     seasons: g.seasons,
     styleTags: g.styleTags,
     imageUrl: g.cutoutUrl ?? g.cropUrl,
+    isCutout: !!g.cutoutUrl,
     createdAt: g.createdAt.toISOString(),
     ...(g.score !== undefined && { score: g.score }),
   };

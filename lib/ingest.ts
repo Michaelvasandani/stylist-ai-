@@ -10,7 +10,8 @@ const PAD = 0.08; // pad boxes so sloppy detections don't clip the garment (docs
 // Backstop for the model's `sameAs`: descriptions this close = the same piece photographed again.
 const DUPLICATE_DISTANCE = 0.12; // measured: same piece 0.02-0.08, different pieces ≥0.23
 
-export type IngestResult = { added: Garment[]; duplicates: number };
+// `crops` feed the cutout step, which runs after the response (see lib/cutout.ts).
+export type IngestResult = { added: Garment[]; duplicates: number; crops: Buffer[] };
 
 // Normalise orientation/size once so the model, the crops and the stored photo all agree.
 async function normalise(input: Buffer) {
@@ -59,21 +60,19 @@ export async function ingestWardrobePhoto(userId: string, file: Buffer): Promise
     .insert(photos)
     .values({ userId, blobUrl: original.url, kind: "wardrobe" })
     .returning({ id: photos.id });
-  if (!detected.length) return { added: [], duplicates: all.length };
+  if (!detected.length) return { added: [], duplicates: all.length, crops: [] };
 
   const { embeddings } = await embedMany({ model: MODELS.embedding, values: detected.map(describeForEmbedding) });
   const fresh = await dropDuplicates(
     userId,
     detected.map((item, i) => ({ item, embedding: embeddings[i] })),
   );
-  if (!fresh.length) return { added: [], duplicates: all.length };
+  if (!fresh.length) return { added: [], duplicates: all.length, crops: [] };
 
-  const crops = await Promise.all(
-    fresh.map(async ({ item }) =>
-      put(`garments/${userId}/${crypto.randomUUID()}.jpg`, await crop(img, item.bbox), {
-        access: "public",
-        contentType: "image/jpeg",
-      }),
+  const crops = await Promise.all(fresh.map(({ item }) => crop(img, item.bbox)));
+  const cropBlobs = await Promise.all(
+    crops.map((data) =>
+      put(`garments/${userId}/${crypto.randomUUID()}.jpg`, data, { access: "public", contentType: "image/jpeg" }),
     ),
   );
 
@@ -83,7 +82,7 @@ export async function ingestWardrobePhoto(userId: string, file: Buffer): Promise
       fresh.map(({ item, embedding }, i) => ({
         userId,
         photoId: photo.id,
-        cropUrl: crops[i].url,
+        cropUrl: cropBlobs[i].url,
         category: item.category,
         subcategory: item.subcategory.toLowerCase(),
         name: item.name,
@@ -100,7 +99,7 @@ export async function ingestWardrobePhoto(userId: string, file: Buffer): Promise
       })),
     )
     .returning();
-  return { added, duplicates: all.length - added.length };
+  return { added, duplicates: all.length - added.length, crops };
 }
 
 type Candidate = { item: DetectedItem; embedding: number[] };
@@ -108,23 +107,27 @@ type Candidate = { item: DetectedItem; embedding: number[] };
 // Skip pieces already in the wardrobe, or repeated within this photo. Category isn't
 // compared: the model files the same overshirt as "top" one run and "outerwear" the next.
 async function dropDuplicates(userId: string, candidates: Candidate[]): Promise<Candidate[]> {
+  // One wardrobe lookup per candidate, all at once (they were sequential round trips).
+  const owned = await Promise.all(
+    candidates.map(async (c) => {
+      const [existing] = await db
+        .select({ id: garments.id })
+        .from(garments)
+        .where(
+          and(
+            eq(garments.userId, userId),
+            lt(cosineDistance(garments.embedding, c.embedding), DUPLICATE_DISTANCE),
+          ),
+        )
+        .limit(1);
+      return !!existing;
+    }),
+  );
   const kept: Candidate[] = [];
-  for (const c of candidates) {
-    if (kept.some((k) => cosine(k.embedding, c.embedding) > 1 - DUPLICATE_DISTANCE)) {
-      continue;
-    }
-    const [existing] = await db
-      .select({ id: garments.id })
-      .from(garments)
-      .where(
-        and(
-          eq(garments.userId, userId),
-          lt(cosineDistance(garments.embedding, c.embedding), DUPLICATE_DISTANCE),
-        ),
-      )
-      .limit(1);
-    if (!existing) kept.push(c);
-  }
+  candidates.forEach((c, i) => {
+    if (owned[i] || kept.some((k) => cosine(k.embedding, c.embedding) > 1 - DUPLICATE_DISTANCE)) return;
+    kept.push(c);
+  });
   return kept;
 }
 

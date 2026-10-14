@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { cutoutGarments } from "@/lib/cutout";
 import { ingestWardrobePhoto } from "@/lib/ingest";
 import { toGarmentCard } from "@/lib/wardrobe";
 import { getOrCreateUserId } from "@/lib/user";
@@ -16,7 +18,9 @@ export async function POST(req: Request) {
 
   const userId = await getOrCreateUserId();
   try {
-    const { added, duplicates } = await ingestWardrobePhoto(userId, Buffer.from(await photo.arrayBuffer()));
+    const { added, duplicates, crops } = await ingestWardrobePhoto(userId, Buffer.from(await photo.arrayBuffer()));
+    // Cards go back with their crops now; transparent cutouts replace them a few seconds later.
+    after(() => cutoutGarments(userId, added.map((g, i) => ({ id: g.id, name: g.name, colorHex: g.colorHex, crop: crops[i] }))));
     return Response.json({ garments: added.map(toGarmentCard), duplicates });
   } catch (e) {
     console.error("ingest failed", e);

@@ -12,6 +12,8 @@ import { ACCESSORY_SUBS, UI_CATEGORIES, matchesCategory, shade, titleCase, type 
 import { AddPhotosButton, DropOverlay, UploadTray } from "./upload";
 import { takeHandedOffPhotos, usePhotoUpload } from "./use-photo-upload";
 
+const CUTOUT_WAIT_MS = 2 * 60_000;
+
 export function Wardrobe() {
   const [all, setAll] = useState<GarmentCard[] | null>(null);
   const [cat, setCat] = useState<UiCategory>("All");
@@ -21,11 +23,21 @@ export function Wardrobe() {
   const [results, setResults] = useState<GarmentCard[] | null>(null); // semantic search hits
   const [searching, setSearching] = useState(false);
   const [selId, setSelId] = useState<string | null>(null);
+  const [pending, setPending] = useState<Set<string>>(new Set()); // ids awaiting a cutout
 
   useEffect(() => {
     fetch("/api/garments")
       .then((r) => r.json())
-      .then((d) => setAll(d.garments))
+      .then((d: { garments: GarmentCard[] }) => {
+        setAll(d.garments);
+        // Pieces still showing a raw crop get cut out in the background.
+        if (d.garments.some((g) => !g.isCutout)) {
+          fetch("/api/garments/cutouts", { method: "POST" })
+            .then((r) => r.json())
+            .then(({ ids }: { ids: string[] }) => setPending((cur) => new Set([...cur, ...ids])))
+            .catch(() => {});
+        }
+      })
       .catch(() => setAll([]));
   }, []);
 
@@ -51,8 +63,30 @@ export function Wardrobe() {
     };
   }, [query]);
 
+  // Cutouts land a few seconds after a piece is added (lib/cutout.ts): poll until this
+  // session's new pieces have them, then swap them in. Give up after a couple of minutes.
+  const waiting = pending.size > 0;
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setInterval(async () => {
+      const fresh: GarmentCard[] = (await fetch("/api/garments").then((r) => r.json()).catch(() => null))?.garments;
+      if (!fresh) return;
+      const done = new Map(fresh.filter((g) => g.isCutout).map((g) => [g.id, g]));
+      // Merge rather than replace, so pieces from uploads still in flight aren't dropped.
+      setAll((cur) => cur?.map((g) => done.get(g.id) ?? g) ?? cur);
+      setPending((cur) => new Set([...cur].filter((id) => !done.has(id))));
+    }, 3000);
+    const stop = setTimeout(() => setPending(new Set()), CUTOUT_WAIT_MS);
+    return () => {
+      clearInterval(t);
+      clearTimeout(stop);
+    };
+  }, [waiting]);
+
   const onGarments = useCallback((added: GarmentCard[]) => {
-    if (added.length) setAll((cur) => [...added, ...(cur ?? [])]);
+    if (!added.length) return;
+    setAll((cur) => [...added, ...(cur ?? [])]);
+    setPending((cur) => new Set([...cur, ...added.filter((g) => !g.isCutout).map((g) => g.id)]));
   }, []);
   const upload = usePhotoUpload(onGarments);
   const onFiles = useCallback(
@@ -201,14 +235,14 @@ export function Wardrobe() {
           ) : (
             <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-3.5 gap-y-6 lg:grid-cols-[repeat(auto-fill,minmax(150px,1fr))]">
               {visible.map((g, i) => (
-                <button key={g.id} onClick={() => setSelId(selId === g.id ? null : g.id)} className="group text-left">
+                <button key={g.id} onClick={() => setSelId(selId === g.id ? null : g.id)} className="group self-start text-left">
                   <div
                     className={cn(
                       "relative aspect-[3/4] overflow-hidden bg-sand outline outline-1 outline-transparent transition-colors group-hover:bg-oat",
                       selId === g.id && "outline-ink",
                     )}
                   >
-                    {g.imageUrl && <Image src={g.imageUrl} alt={g.name} fill sizes="200px" className="object-cover" />}
+                    <GarmentImage g={g} sizes="200px" pending={pending.has(g.id)} />
                   </div>
                   <p className="mt-2.5 text-[13px] font-normal">{g.name}</p>
                   <p className="text-xs text-taupe">
@@ -223,6 +257,7 @@ export function Wardrobe() {
 
         <PieceDetail
           garment={selected}
+          cuttingOut={!!selected && pending.has(selected.id)}
           onClose={() => setSelId(null)}
           onRemoved={(id) => {
             setSelId(null);
@@ -237,10 +272,12 @@ export function Wardrobe() {
 
 function PieceDetail({
   garment: g,
+  cuttingOut,
   onClose,
   onRemoved,
 }: {
   garment: GarmentCard | null;
+  cuttingOut: boolean;
   onClose: () => void;
   onRemoved: (id: string) => void;
 }) {
@@ -278,7 +315,7 @@ function PieceDetail({
             </button>
           </div>
           <div className="relative mt-3.5 aspect-square overflow-hidden bg-sand">
-            {g.imageUrl && <Image src={g.imageUrl} alt={g.name} fill sizes="360px" className="object-contain" />}
+            <GarmentImage g={g} sizes="360px" pending={cuttingOut} />
           </div>
           <h3 className="mt-4 font-serif text-[32px] font-light leading-none">{g.name}</h3>
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -327,6 +364,28 @@ function PieceDetail({
         </div>
       )}
     </aside>
+  );
+}
+
+// Cutouts float on the tile like a product shot; a raw crop fills it, shimmering until its cutout arrives.
+function GarmentImage({ g, sizes, pending }: { g: GarmentCard; sizes: string; pending: boolean }) {
+  if (!g.imageUrl) return null;
+  if (g.isCutout) {
+    return (
+      <Image
+        src={g.imageUrl}
+        alt={g.name}
+        fill
+        sizes={sizes}
+        className="animate-in fade-in object-contain p-[12%] drop-shadow-[0_10px_14px_rgba(60,45,30,0.18)] duration-500 transition-transform group-hover:scale-[1.03]"
+      />
+    );
+  }
+  return (
+    <>
+      <Image src={g.imageUrl} alt={g.name} fill sizes={sizes} className={cn("object-cover", pending && "opacity-60 blur-[1px]")} />
+      {pending && <span className="eyebrow absolute inset-x-0 bottom-3 animate-pulse text-center text-ink">Cutting out…</span>}
+    </>
   );
 }
 

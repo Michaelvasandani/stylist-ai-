@@ -51,7 +51,7 @@ export async function detectGarments(image: Buffer, owned: OwnedPiece[] = []): P
   const { output } = await generateText({
     model: MODELS.vision,
     output: Output.object({ schema: z.object({ items: z.array(detectedItem) }) }),
-    providerOptions: { google: { thinkingConfig: { thinkingLevel: "low" } } },
+    providerOptions: { google: { thinkingConfig: { thinkingLevel: "minimal" } } },
     messages: [
       {
         role: "user",
