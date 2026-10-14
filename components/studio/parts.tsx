@@ -162,6 +162,9 @@ function ShopCards({ data, onPick, onMore, picked }: { data: ShopOptions } & Omi
               {p.tier} · {p.seller ?? "Shopify"}
             </p>
             <h4 className="mt-1 line-clamp-2 font-serif text-[17px] leading-[1.1]">{p.title}</h4>
+            <p className={cn("mt-1 text-[11px]", p.sizeMatched ? "text-taupe" : "text-gold-deep")}>
+              {p.sizeMatched ? (p.sizeLabel ? `In your size · ${p.sizeLabel}` : "One size") : `Size ${data.size} not confirmed`}
+            </p>
             <div className="mt-auto flex items-center justify-between gap-2 pt-2">
               <b className="font-serif text-lg font-normal">{money(p.price)}</b>
               <div className="flex gap-1.5">

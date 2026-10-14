@@ -17,6 +17,8 @@ export type ShopProduct = {
   sellerUrl?: string;
   rating?: number;
   variantId?: string;
+  options?: { name: string; values: string[] }[]; // e.g. Size: ["Small (S)", "Medium (M)"]
+  selected?: { name: string; label: string }[]; // what get_product actually matched, echoed back
 };
 
 export type SearchInput = {
@@ -32,7 +34,10 @@ export type SearchInput = {
   limit?: number;
 };
 
-async function callTool<T>(name: string, catalog: Record<string, unknown>): Promise<T> {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// The catalog rate-limits bursts (about one call a second) and says how long to wait.
+async function callTool<T>(name: string, catalog: Record<string, unknown>, attempt = 0): Promise<T> {
   const res = await fetch(ENDPOINT, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
@@ -45,6 +50,10 @@ async function callTool<T>(name: string, catalog: Record<string, unknown>): Prom
   });
   if (!res.ok) throw new Error(`Shopify catalog ${name} failed: ${res.status}`);
   const json = await res.json();
+  if (json.error?.message === "Rate limit exceeded" && attempt < 4) {
+    await sleep(1000 * (json.error.data?.retry_after ?? 1) + 250 * attempt);
+    return callTool(name, catalog, attempt + 1);
+  }
   if (json.error) throw new Error(`Shopify catalog ${name}: ${json.error.message}`);
   return json.result.structuredContent as T;
 }
@@ -56,6 +65,8 @@ type RawProduct = {
   media?: { type: string; url: string }[];
   price_range?: { min: Money };
   rating?: { value: number };
+  options?: { name: string; values?: { label: string }[] }[];
+  selected?: { name: string; label: string }[];
   variants?: {
     id: string;
     price?: Money;
@@ -76,8 +87,35 @@ function toCard(p: RawProduct): ShopProduct {
     sellerUrl: v?.seller?.url,
     rating: p.rating?.value,
     variantId: v?.id,
+    options: p.options?.map((o) => ({ name: o.name, values: (o.values ?? []).map((x) => x.label) })),
+    selected: p.selected,
   };
 }
+
+// Stores label sizes their own way ("M", "Medium", "Medium (M)", "US 9", "9 US", "32 x 30"),
+// and get_product only selects on an exact label, so map the user's size onto the product's.
+const SIZE_WORDS: Record<string, string> = {
+  "extra extra small": "xxs", "extra small": "xs", small: "s", medium: "m", large: "l",
+  "extra large": "xl", "double extra large": "xxl", "extra extra large": "xxl", "2xl": "xxl",
+  "triple extra large": "xxxl", "3xl": "xxxl", "one size": "os", "one size fits all": "os",
+};
+function sizeKeys(label: string) {
+  const l = label.toLowerCase().trim();
+  const inParens = l.match(/\(([^)]+)\)/)?.[1];
+  return [l, l.replace(/\s*\([^)]*\)/, ""), inParens].flatMap((x) => {
+    if (!x) return [];
+    const bare = x.replace(/\b(us|uk|eu|size|men'?s|women'?s)\b/g, "").replace(/\s*[x×/]\s*/g, "x").replace(/\.0\b/, "").trim();
+    return [bare, SIZE_WORDS[bare] ?? bare];
+  });
+}
+export function matchOption(options: ShopProduct["options"], name: RegExp, wanted: string) {
+  const values = options?.find((o) => name.test(o.name))?.values;
+  if (!values) return undefined;
+  const want = new Set(sizeKeys(wanted));
+  return values.find((v) => sizeKeys(v).some((k) => want.has(k))) ?? null; // null: has the option, not this value
+}
+export const SIZE = /^size$/i;
+export const COLOR = /^colou?r$/i;
 
 async function inlineImage(url: string) {
   const res = await fetch(url);

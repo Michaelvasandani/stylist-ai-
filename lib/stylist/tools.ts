@@ -2,7 +2,7 @@ import { tool, type InferUITools, type UIMessage } from "ai";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db, garments, looks } from "@/lib/db";
-import { getProduct, searchCatalog, type ShopProduct } from "@/lib/shopify";
+import { COLOR, getProduct, matchOption, SIZE, searchCatalog, type ShopProduct } from "@/lib/shopify";
 import { CATEGORIES } from "@/lib/vision";
 import { listEvents } from "@/lib/google-calendar";
 import { getWeather } from "@/lib/weather";
@@ -35,38 +35,60 @@ export type ShopOptions = {
   gap: string;
   size: string;
   budgetUsd: number;
-  sizeMatched: boolean; // false when we had to drop the size filter to find 3 options
-  options: (ShopProduct & { tier: "good" | "better" | "best" })[];
+  sizeMatched: boolean; // false when any option couldn't be confirmed in their size
+  // sizeLabel: the store's own label for their size ("Medium (M)"), when that variant was selected.
+  options: (ShopProduct & { tier: "good" | "better" | "best"; sizeMatched: boolean; sizeLabel?: string })[];
 };
 
 const TIERS = ["good", "better", "best"] as const;
 
-// Shopify's price filter matches on the product's price range, so a variant can still be over budget.
+// Shopify's price filter matches on the product's price range, so a variant can still be over budget,
+// and its Size filter is loose (it returns products that don't stock the size). So both are checked
+// against the product itself, and checkout points at the exact variant in their size and colour.
 // `exclude` skips products already shown, so "show me more" brings fresh options.
 async function threeOptions(query: string, maxCents: number, size: string, exclude: string[] = []) {
   const search = (sizes?: string[]) =>
     searchCatalog({ query, maxPriceCents: maxCents, sizes, limit: exclude.length ? 24 : 12 }).then((ps) =>
       ps.filter((p) => p.price && p.price.amount <= maxCents && !exclude.includes(p.id)),
     );
+  // undefined: no size option (one-size accessories); null: sized, but not in theirs.
+  const stocks = (p: ShopProduct) => matchOption(p.options, SIZE, size) !== null;
   let found = await search([size]);
-  let sizeMatched = true;
-  if (found.length < 3) {
+  if (found.filter(stocks).length < 3) {
     const more = await search();
     found = [...found, ...more.filter((p) => !found.some((f) => f.id === p.id))];
-    sizeMatched = false;
   }
+  // Products that list their size first; others only to make up three.
+  const ranked = [...found.filter(stocks), ...found.filter((p) => !stocks(p))];
   // Cheapest → priciest reads naturally as good / better / best.
-  const picked = found.slice(0, 3).sort((a, b) => a.price!.amount - b.price!.amount);
+  const picked = ranked.slice(0, 3).sort((a, b) => a.price!.amount - b.price!.amount);
 
-  // Point checkout at the variant in their size when the product has it.
-  const options = await Promise.all(
-    picked.map(async (p, i) => {
-      const sized = await getProduct(p.id, [{ name: "Size", label: size }]).catch(() => null);
-      const fits = sized?.checkoutUrl && sized.price && sized.price.amount <= maxCents;
-      return { ...p, ...(fits && { checkoutUrl: sized.checkoutUrl, price: sized.price, variantId: sized.variantId }), tier: TIERS[i] };
-    }),
-  );
-  return { options, sizeMatched };
+  const words = query.toLowerCase();
+  const options = [];
+  // One at a time: the catalog rate-limits bursts.
+  for (const [i, p] of picked.entries()) {
+    const sizeLabel = matchOption(p.options, SIZE, size);
+    const color = p.options
+      ?.find((o) => COLOR.test(o.name))
+      ?.values.filter((v) => words.includes(v.toLowerCase()))
+      .sort((a, b) => b.length - a.length)[0];
+    const selected = [
+      ...(color ? [{ name: "Color", label: color }] : []),
+      ...(sizeLabel ? [{ name: "Size", label: sizeLabel }] : []),
+    ];
+    const sized = selected.length ? await getProduct(p.id, selected).catch(() => null) : null;
+    const sizeMatched =
+      sizeLabel === undefined || (!!sizeLabel && !!sized?.selected?.some((x) => SIZE.test(x.name) && x.label === sizeLabel));
+    const fits = sized?.checkoutUrl && sized.price && sized.price.amount <= maxCents;
+    options.push({
+      ...p,
+      ...(fits && { checkoutUrl: sized.checkoutUrl, price: sized.price, variantId: sized.variantId, imageUrl: sized.imageUrl ?? p.imageUrl }),
+      tier: TIERS[i],
+      sizeMatched: sizeMatched && !!(fits || sizeLabel === undefined),
+      sizeLabel: sizeMatched && sizeLabel ? sizeLabel : undefined,
+    });
+  }
+  return { options, sizeMatched: options.every((o) => o.sizeMatched) };
 }
 
 // Tools shared by text chat and the voice loop (both go through /api/chat).
