@@ -3,14 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { ArrowUp, Mic, MicOff } from "lucide-react";
+import { ArrowUp, ImagePlus, Mic, MicOff } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { OutfitBoard, StylistMessage } from "@/lib/stylist/tools";
+import type { LookSet, StylistMessage } from "@/lib/stylist/tools";
 import { TopBar } from "@/components/shell/top-bar";
 import { styleMeFor, UpcomingEvents, useCalendar } from "./calendar";
-import { OutfitStage } from "./outfit-stage";
-import { latestBoard, textOf, toolOf, ToolPart, type ShopOption } from "./parts";
+import { LookBoard } from "./look-board";
+import { shrink } from "@/components/wardrobe/use-photo-upload";
+import { imagesOf, latestBoard, textOf, toolOf, ToolPart, type ShopOption } from "./parts";
 import { useVoiceLoop, type VoiceState } from "./use-voice-loop";
 
 const STARTERS = ["Rooftop dinner in SF tonight", "First day at a new job", "Wedding guest, outdoors, October"];
@@ -29,6 +30,8 @@ export function Studio() {
   const [picks, setPicks] = useState<Record<string, ShopOption>>({}); // gap → product tried on the board
   const voiceTurn = useRef(false);
   const threadRef = useRef<HTMLDivElement>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
 
   const transport = useMemo(() => new DefaultChatTransport<StylistMessage>({ api: "/api/chat" }), []);
   const voiceRef = useRef<ReturnType<typeof useVoiceLoop> | null>(null);
@@ -69,8 +72,8 @@ export function Studio() {
     voiceRef.current = voice;
   }, [voice]);
 
-  const busy = chat.status === "submitted" || chat.status === "streaming";
-  const { board, shop } = useMemo(() => latestBoard(chat.messages), [chat.messages]);
+  const busy = uploading || chat.status === "submitted" || chat.status === "streaming";
+  const { board, shop, inspo } = useMemo(() => latestBoard(chat.messages), [chat.messages]);
   const shopOptions = useMemo(() => new Map([...shop].map(([gap, s]) => [gap, s.options])), [shop]);
 
   useEffect(() => {
@@ -82,6 +85,30 @@ export function Studio() {
     chat.sendMessage({ text }, { body: { voice: voice.state !== "off" } });
     setInput("");
   };
+
+  // "Copy a look": upload the inspiration photo, then hand the stylist its URL.
+  const copyLook = async (file: File) => {
+    if (busy) return;
+    setUploading(true);
+    try {
+      const body = new FormData();
+      body.append("photo", await shrink(file), "inspo.jpg");
+      const res = await fetch("/api/looks/inspo", { method: "POST", body });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? `Upload failed (${res.status})`);
+      const text = input.trim() || "Copy this look for me.";
+      chat.sendMessage(
+        { text, files: [{ type: "file", mediaType: "image/jpeg", url: json.url, filename: "inspo.jpg" }] },
+        { body: { voice: voice.state !== "off" } },
+      );
+      setInput("");
+    } catch (e) {
+      toast.error("Couldn't upload that photo", { description: e instanceof Error ? e.message : undefined });
+    } finally {
+      setUploading(false);
+    }
+  };
+  const pickPhoto = () => photoRef.current?.click();
 
   const toggleVoice = async () => {
     if (voice.state !== "off") return voice.stop();
@@ -99,7 +126,7 @@ export function Studio() {
 
   return (
     <>
-      <TopBar title="Studio" meta={board ? board.title : "New look"}>
+      <TopBar title="Studio" meta={board ? board.occasion : "New look"}>
         <span className="eyebrow hidden text-taupe xl:block">Vercel · Neon · Shopify · AI Gateway</span>
       </TopBar>
       <div className="grid min-h-0 flex-1 lg:grid-cols-[1fr_380px]">
@@ -110,6 +137,8 @@ export function Studio() {
           onPick={pick}
           onSave={(names) => send(`Save this look as it is on my board now: ${names.join(", ")}.`)}
           onStarter={send}
+          onCopyLook={pickPhoto}
+          inspo={inspo}
           busy={busy}
           upcoming={<UpcomingEvents cal={cal} busy={busy} onPick={(e) => send(styleMeFor(e))} onDisconnect={disconnect} className="mt-8" />}
         />
@@ -137,6 +166,10 @@ export function Studio() {
               m.role === "user" ? (
                 <div key={m.id} className="max-w-[88%] self-end bg-ink px-3.5 py-3 font-serif text-[17px] italic leading-tight text-bone">
                     <span className="eyebrow mb-1.5 block font-sans not-italic text-[#9b8f80]">{m.metadata?.voice ? "Voice" : "You"}</span>
+                    {imagesOf(m).map((url) => (
+                      // eslint-disable-next-line @next/next/no-img-element -- inspiration photo from Blob
+                      <img key={url} src={url} alt="Look to copy" className="mb-2 max-h-56 w-full object-cover" />
+                    ))}
                     {textOf(m)}
                   </div>
               ) : (
@@ -146,11 +179,21 @@ export function Studio() {
                     const t = toolOf(p);
                     if (!t) return null;
                     const gap = (t.input as { gap?: string } | undefined)?.gap;
-                    return <ToolPart key={i} tool={t} onPick={pick} picked={gap ? picks[gap]?.id : undefined} />;
+                    return (
+                      <ToolPart
+                        key={i}
+                        tool={t}
+                        onPick={pick}
+                        onMore={busy ? undefined : (g) => send(`Not quite. Show me 3 more options for the ${g}.`)}
+                        onAnswer={busy || m.id !== chat.messages.at(-1)?.id ? undefined : send}
+                        picked={gap ? picks[gap]?.id : undefined}
+                      />
+                    );
                   })}
                 </div>
               ),
             )}
+            {uploading && <p className="font-serif text-[19px] italic text-taupe">Pinning up your inspiration…</p>}
             {busy && chat.messages.at(-1)?.role === "user" && <p className="font-serif text-[19px] italic text-taupe">…</p>}
             {voice.state === "hearing" && <p className="font-serif text-[22px] italic text-ink after:animate-pulse after:text-gold after:content-['▍']">Listening</p>}
             {voice.state === "thinking" && !busy && <p className="font-serif text-[19px] italic text-taupe">Got it…</p>}
@@ -163,6 +206,27 @@ export function Studio() {
               send(input);
             }}
           >
+            <input
+              ref={photoRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) copyLook(f);
+              }}
+            />
+            <button
+              type="button"
+              onClick={pickPhoto}
+              disabled={busy}
+              aria-label="Copy a look from a photo"
+              title="Copy a look from a photo"
+              className="grid size-9 shrink-0 place-items-center rounded-full text-taupe hover:bg-sand hover:text-ink disabled:opacity-40"
+            >
+              <ImagePlus className="size-[18px]" strokeWidth={1.4} />
+            </button>
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -215,20 +279,22 @@ function Canvas({
   onPick,
   onSave,
   onStarter,
+  onCopyLook,
+  inspo,
   busy,
   upcoming,
 }: {
-  board: OutfitBoard | null;
+  board: LookSet | null;
   picks: Record<string, ShopOption>;
   shop: Map<string, ShopOption[]>;
   onPick: (gap: string, p: ShopOption) => void;
   onSave: (names: string[]) => void;
   onStarter: (t: string) => void;
+  onCopyLook: () => void;
+  inspo: string | null;
   busy: boolean;
   upcoming: React.ReactNode;
 }) {
-  // Gaps from the board, plus anything shopped for that the board didn't name.
-  const gaps = board ? [...board.gaps.map((g) => g.label), ...[...shop.keys()].filter((s) => !board.gaps.some((g) => g.label === s))] : [];
   return (
     <section className="relative m-5 hidden min-h-0 flex-col overflow-y-auto bg-sand bg-[radial-gradient(rgba(28,26,23,.07)_1px,transparent_1px)] bg-[length:22px_22px] p-6 pb-24 lg:flex">
       {!board ? (
@@ -241,20 +307,31 @@ function Canvas({
                 {s}
               </button>
             ))}
+            <button disabled={busy} onClick={onCopyLook} className="btn-chic btn-sm normal-case tracking-normal text-[13px]">
+              <ImagePlus className="size-3.5" strokeWidth={1.6} /> Copy a look
+            </button>
           </div>
           {upcoming}
         </div>
       ) : (
-        <OutfitStage
-          key={board.title + board.pieces.map((p) => p.garment.id).join()}
-          board={board}
-          gaps={gaps}
-          shop={shop}
-          picks={picks}
-          onPick={onPick}
-          onSave={onSave}
-          busy={busy}
-        />
+        <>
+          {inspo && (
+            <figure className="absolute bottom-24 right-6 z-10 w-24 rotate-[3deg] bg-paper p-1.5 pb-2 shadow-[0_8px_20px_rgba(60,45,30,.18)]">
+              {/* eslint-disable-next-line @next/next/no-img-element -- inspiration photo from Blob */}
+              <img src={inspo} alt="The look you're copying" className="aspect-[3/4] w-full object-cover" />
+              <figcaption className="eyebrow mt-1.5 text-center text-taupe">Inspiration</figcaption>
+            </figure>
+          )}
+          <LookBoard
+            key={board.looks.map((l) => l.title).join()}
+            set={board}
+            shop={shop}
+            picks={picks}
+            onPick={onPick}
+            onSave={onSave}
+            busy={busy}
+          />
+        </>
       )}
     </section>
   );

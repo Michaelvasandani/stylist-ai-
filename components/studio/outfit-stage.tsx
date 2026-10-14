@@ -73,9 +73,33 @@ function buildSlots(board: OutfitBoard, gaps: string[], shop: Map<string, ShopOp
 }
 
 const nameOf = (o: Option) => (o.kind === "garment" ? o.garment.name : o.kind === "shop" ? o.product.title : `Missing: ${o.label}`);
-const imageOf = (o: Option) => (o.kind === "garment" ? o.garment.imageUrl : o.kind === "shop" ? o.product.imageUrl : null);
+// Shopify photos come with models and backgrounds; they're cut out like wardrobe pieces,
+// keyed by image URL and kept for the session so flipping between looks doesn't redo them.
+const shopCutouts = new Map<string, string | null>(); // null = requested, not back yet (or failed)
+const imageOf = (o: Option) =>
+  o.kind === "garment" ? o.garment.imageUrl : o.kind === "shop" ? (o.product.imageUrl && shopCutouts.get(o.product.imageUrl)) || o.product.imageUrl : null;
 // Transparent cutouts get a soft shadow; anything with a background is multiplied into the stage.
-const isCutout = (o: Option) => o.kind === "garment" && o.garment.isCutout;
+const isCutout = (o: Option) =>
+  o.kind === "garment" ? o.garment.isCutout : o.kind === "shop" && !!o.product.imageUrl && !!shopCutouts.get(o.product.imageUrl);
+
+function useShopCutouts(shop: Map<string, ShopOption[]>) {
+  const [, rerender] = useState(0);
+  useEffect(() => {
+    for (const p of [...shop.values()].flat()) {
+      const src = p.imageUrl;
+      if (!src || shopCutouts.has(src)) continue;
+      shopCutouts.set(src, null);
+      fetch("/api/shop/cutout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ imageUrl: src, title: p.title }) })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { url?: string } | null) => {
+          if (!d?.url) return;
+          shopCutouts.set(src, d.url);
+          rerender((n) => n + 1);
+        })
+        .catch(() => {});
+    }
+  }, [shop]);
+}
 
 export function OutfitStage({
   board,
@@ -103,6 +127,7 @@ export function OutfitStage({
   }, []);
 
   const slots = useMemo(() => buildSlots(board, gaps, shop, closet), [board, gaps, shop, closet]);
+  useShopCutouts(shop);
   const [index, setIndexState] = useState<Record<string, number>>({});
   const [active, setActiveState] = useState(0);
   const [dir, setDir] = useState<1 | -1>(1);
@@ -165,18 +190,25 @@ export function OutfitStage({
     }
   });
 
-  // First slot of each area goes on the figure; extras (a second accessory, say) line up beside it.
-  const placed = new Set<Area>();
+  // Unfilled gaps stay off the figure (they'd sit on top of what's there) and list beside it instead.
+  const onFigure = slots.map((s) => s.options[current(s)].kind !== "missing");
+  const worn = slots.filter((_, i) => onFigure[i]);
+  // A second piece in an area is styled, not shrunk: a second top (sweater over a shirt) fans out
+  // like a layer, extra bottoms or shoes sit beside the first, and accessories stack in their column.
+  const nth = (s: Slot) => worn.filter((x) => worn.indexOf(x) < worn.indexOf(s) && x.area === s.area).length;
+  const layered = worn.some((x) => x.area === "layer") || worn.filter((x) => x.area === "top" || x.area === "dress").length > 1;
   const layout = slots.map((s) => {
+    const n = onFigure[slots.indexOf(s)] ? nth(s) : 0;
     const box = { ...BOX[s.area] };
-    const extra = placed.has(s.area);
-    placed.add(s.area);
-    if (extra) Object.assign(box, { ...BOX.accessory, top: BOX.accessory.top + 18 * slots.filter((x, j) => j < slots.indexOf(s) && x.area === s.area).length });
-    // Layer + top: fan them like a flat lay, jacket behind and to the right.
-    const hasLayer = slots.some((x) => x.area === "layer");
-    if (s.area === "layer" && slots.some((x) => x.area === "top" || x.area === "dress")) box.x = 16;
-    if ((s.area === "top" || s.area === "dress") && hasLayer && !extra) box.x = -12;
-    if (s.area === "bottom" && slots.some((x) => x.area === "dress")) box.top = 58;
+    if (n > 0) {
+      if (s.area === "accessory") box.top += 18 * n;
+      else if (s.area === "top" || s.area === "dress") Object.assign(box, { ...BOX.layer, x: 16 + 10 * (n - 1) + (worn.some((x) => x.area === "layer") ? 10 : 0), z: 0 });
+      else Object.assign(box, { x: box.x + 22 * n, z: box.z - 1 });
+    }
+    // Layer + top: fan them like a flat lay, layer behind and to the right.
+    if (s.area === "layer" && worn.some((x) => x.area === "top" || x.area === "dress")) box.x = 16;
+    if ((s.area === "top" || s.area === "dress") && layered && n === 0) box.x = -12;
+    if (s.area === "bottom" && worn.some((x) => x.area === "dress")) box.top = 58;
     return box;
   });
   const activeBox = layout[active] ?? layout[0];
@@ -235,58 +267,75 @@ export function OutfitStage({
         </ol>
 
         {/* Stage: spotlight, floor shadow, the figure. */}
-        <div className="relative min-h-0 overflow-hidden rounded-3xl bg-[radial-gradient(ellipse_at_50%_38%,#fdfbf7_0%,#f1ebe1_48%,#e3d9c9_100%)]">
-          <div className="absolute inset-x-[22%] bottom-[5%] h-[5%] rounded-[50%] bg-[radial-gradient(closest-side,rgba(60,45,30,.22),transparent)]" />
-          <div className="absolute inset-y-[3%] left-1/2 aspect-[3/5] max-w-[92%] -translate-x-1/2">
-            {slots.map((s, si) => {
-              const o = s.options[current(s)];
-              const b = layout[si];
-              const src = imageOf(o);
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => setActive(si)}
-                  aria-label={`${s.label}: ${nameOf(o)}`}
-                  className="absolute -translate-x-1/2 transition-[top,left,width,height] duration-500 ease-[cubic-bezier(.2,.8,.2,1)]"
-                  style={{ top: `${b.top}%`, height: `${b.height}%`, width: `${b.width}%`, left: `${50 + b.x}%`, zIndex: si === active ? 10 : b.z }}
-                >
-                  {src ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- wardrobe blobs and Shopify CDNs
-                    <img
-                      key={o.key}
-                      src={src}
-                      alt={nameOf(o)}
+        <div className="relative flex min-h-0 flex-col overflow-hidden rounded-3xl bg-[radial-gradient(ellipse_at_50%_38%,#fdfbf7_0%,#f1ebe1_48%,#e3d9c9_100%)]">
+          {onFigure.includes(false) && (
+            <ul className="flex flex-wrap items-center gap-1.5 px-4 pt-4">
+              <li className="eyebrow mr-1 text-taupe">Missing</li>
+              {slots.map((s, si) =>
+                onFigure[si] ? null : (
+                  <li key={s.id}>
+                    <button
+                      onClick={() => setActive(si)}
                       className={cn(
-                        "size-full object-contain animate-in fade-in zoom-in-95 duration-300",
-                        dir === 1 ? "slide-in-from-right-6" : "slide-in-from-left-6",
-                        isCutout(o)
-                          ? "drop-shadow-[0_14px_14px_rgba(60,45,30,.22)]"
-                          : "mix-blend-multiply [filter:contrast(1.04)_brightness(1.04)]",
-                        si === active && isCutout(o) && "drop-shadow-[0_0_18px_rgba(201,162,74,.45)]",
+                        "rounded-xl border border-dashed px-2.5 py-1.5 text-left font-serif text-[14px] italic leading-tight text-taupe transition-colors",
+                        si === active ? "border-ink bg-paper/80 text-ink" : "border-taupe/60 hover:bg-paper/60",
                       )}
-                    />
-                  ) : (
-                    <span
-                      key={o.key}
-                      className="grid size-full place-items-center rounded-[28%] border-[1.5px] border-dashed border-taupe/70 p-3 text-center font-serif text-[15px] italic leading-tight text-taupe animate-in fade-in"
                     >
-                      {nameOf(o)}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-
-            {/* Big glass arrows flank whichever piece is selected. */}
-            {slots[active] && slots[active].options.length > 1 && activeBox && (
-              <div
-                className="pointer-events-none absolute inset-x-[-14%] flex items-center justify-between transition-[top,height] duration-500 ease-[cubic-bezier(.2,.8,.2,1)]"
-                style={{ top: `${activeBox.top}%`, height: `${activeBox.height}%` }}
-              >
-                <ArrowButton dir={-1} onClick={() => cycle(active, -1)} />
-                <ArrowButton dir={1} onClick={() => cycle(active, 1)} />
-              </div>
-            )}
+                      {s.gap}
+                    </button>
+                  </li>
+                ),
+              )}
+            </ul>
+          )}
+          {/* The figure gets whatever height the missing strip leaves. */}
+          <div className="relative min-h-0 flex-1">
+            <div className="absolute inset-x-[22%] bottom-[5%] h-[5%] rounded-[50%] bg-[radial-gradient(closest-side,rgba(60,45,30,.22),transparent)]" />
+            <div className="absolute inset-y-[3%] left-1/2 aspect-[3/5] max-w-[92%] -translate-x-1/2">
+              {slots.map((s, si) => {
+                const o = s.options[current(s)];
+                const b = layout[si];
+                if (!onFigure[si]) return null;
+                const src = imageOf(o);
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setActive(si)}
+                    aria-label={`${s.label}: ${nameOf(o)}`}
+                    className="absolute -translate-x-1/2 transition-[top,left,width,height] duration-500 ease-[cubic-bezier(.2,.8,.2,1)]"
+                    style={{ top: `${b.top}%`, height: `${b.height}%`, width: `${b.width}%`, left: `${50 + b.x}%`, zIndex: si === active ? 10 : b.z }}
+                  >
+                    {src && (
+                      // eslint-disable-next-line @next/next/no-img-element -- wardrobe blobs and Shopify CDNs
+                      <img
+                        key={o.key}
+                        src={src}
+                        alt={nameOf(o)}
+                        className={cn(
+                          "size-full object-contain animate-in fade-in zoom-in-95 duration-300",
+                          dir === 1 ? "slide-in-from-right-6" : "slide-in-from-left-6",
+                          isCutout(o)
+                            ? "drop-shadow-[0_14px_14px_rgba(60,45,30,.22)]"
+                            : "mix-blend-multiply [filter:contrast(1.04)_brightness(1.04)]",
+                          si === active && isCutout(o) && "drop-shadow-[0_0_18px_rgba(201,162,74,.45)]",
+                        )}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+  
+              {/* Big glass arrows flank whichever piece is selected. */}
+              {slots[active] && onFigure[active] && slots[active].options.length > 1 && activeBox && (
+                <div
+                  className="pointer-events-none absolute inset-x-[-14%] flex items-center justify-between transition-[top,height] duration-500 ease-[cubic-bezier(.2,.8,.2,1)]"
+                  style={{ top: `${activeBox.top}%`, height: `${activeBox.height}%` }}
+                >
+                  <ArrowButton dir={-1} onClick={() => cycle(active, -1)} />
+                  <ArrowButton dir={1} onClick={() => cycle(active, 1)} />
+                </div>
+              )}
+            </div>
           </div>
           <p className="eyebrow absolute bottom-4 left-1/2 hidden -translate-x-1/2 text-taupe/80 xl:block">← → swap · ↑ ↓ slot</p>
           {busy && <p className="eyebrow absolute right-5 top-4 text-taupe">Restyling…</p>}

@@ -18,7 +18,7 @@ const CONCURRENCY = 3;
 const MAX_EDGE = 1600; // matches the server's normalise(); keeps bodies under Vercel's 4.5 MB limit
 
 // Downscale in the browser before upload. createImageBitmap applies EXIF orientation.
-async function shrink(file: File): Promise<Blob> {
+export async function shrink(file: File): Promise<Blob> {
   try {
     const bitmap = await createImageBitmap(file);
     const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
